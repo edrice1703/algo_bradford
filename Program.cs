@@ -1,92 +1,228 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.Globalization;
-
-static void AfficherMatrice(int[,] matrice)
-{
-    int n = matrice.GetLength(0);
-    Console.WriteLine();
-    for (int i = 0; i < n; i++)
+    static int[] Bases(int[,] M)
     {
-        for (int j = 0; j < n; j++)
-        {
-            Console.WriteLine(matrice[i,j] + "\t");
-        }
-    }
-    Console.WriteLine();
-}
-static int[,] CopierMatrice(int[,] matrice)
-{
-    int n = matrice.GetLength(0);
-    int[,] copie = new int[n,n];
+        int n = M.GetLength(0);
+        int[] b = new int[n];
 
-    for (int i = 0; i < n; i++)
-    {
-        for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++)
         {
-            copie[i,j] = matrice[i,j];
-        }
-    }
-    return copie;
-}
+            b[i] = 0;
 
-static void TrouverBasesInitiales(int[,] matrice, int[] b)
-{
-    int n = matrice.GetLength(0);
-    for (int i = 0; i < n; i++)
-    {
-        int min = matrice[i,0];
-        int colMin = 0;
-        for (int j = 1; j < n; j++)
-        {
-            if(matrice[i,j] < min){
-                min = matrice[i,j];
-                colMin = j;
+            for (int j = 1; j < n; j++)
+            {
+                if (M[i, j] < M[i, b[i]])
+                    b[i] = j;
             }
         }
-        b[i] = colMin;
-    }
-}
 
-static void AfficherBases(int[] b)
-{
-    for (int i = 0; i < b.Length; i++)
+        return b;
+    }
+
+
+    // 2. Compter les bases par colonne
+    static int[] CompterBases(int[] b)
     {
-        System.Console.WriteLine(b[i] + "\t");
-    }
-    System.Console.WriteLine();
-}
+        int n = b.Length;
+        int[] nb = new int[n];
 
-static void CompterBases(int[] b, int[] nb)
-{
-    int n = b.Length;
-    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++)
+            nb[b[i]]++;
+
+        return nb;
+    }
+
+
+    // 3. Trouver une colonne de A' contenant plusieurs bases
+    static int ChercherC(int[] nb, bool[] A)
     {
-        nb[j] = 0;
+        for (int j = 0; j < nb.Length; j++)
+        {
+            if (!A[j] && nb[j] > 1)
+                return j;
+        }
+
+        return -1;
     }
-    for (int i = 0; i < n; i++)
+
+    // 4. Calculer Delta = min(a'i - bi)
+    static int Delta(int[,] M, int[] b, bool[] A, bool[] lignes, out int ligne, out int colonne)
     {
-        nb[b[i]]++;
+        int n = M.GetLength(0);
+
+        int d = Int32.MaxValue;
+        ligne = -1;
+        colonne = -1;
+
+        for (int i = 0; i < n; i++)
+        {
+            if (!lignes[i])
+                continue;
+
+            int bi = M[i, b[i]];
+
+            for (int j = 0; j < n; j++)
+            {
+                if (!A[j])
+                {
+                    int x = M[i, j] - bi;
+
+                    if (x < d)
+                    {
+                        d = x;
+                        ligne = i;
+                        colonne = j;
+                    }
+                }
+            }
+        }
+
+        return d;
     }
-}
 
 
-static int TrouverColonneAvecPlusieursBases(int[] nb)
-{
-    int n = nb.Length;
-    for (int i = 0; i < n; i++)
+    // 5. Algorithme Mack-Bradford
+    static int[] MackBradford(int[,] originale)
     {
-        if(nb[i] > 1) return i;
-    }
-    return -1;
-}
+        int n = originale.GetLength(0);
 
-static void Initialisation(int n, bool[] A, bool[] APrime)
-{
-    for (int i = 0; i < n; i++)
+        // Matrice de travail
+        int[,] M = new int[n, n];
+
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                M[i, j] = originale[i, j];
+
+        // Bases initiales
+        int[] b = Bases(M);
+
+        while (true)
+        {
+            int[] nb = CompterBases(b);
+
+            // Une base par colonne => terminé
+            bool fini = true;
+
+            for (int j = 0; j < n; j++)
+            {
+                if (nb[j] != 1) fini = false;
+            }
+
+            if (fini) return b;
+
+            // -------------------------------
+            // A = vide ; A' = toutes les colonnes
+            // -------------------------------
+
+            bool[] A = new bool[n];
+
+            for (int j = 0; j < n; j++)
+                A[j] = false;
+
+
+            // Etape 1 : chercher C
+            int C = ChercherC(nb, A);
+
+            if (C == -1)
+                return b;
+
+            A[C] = true;
+
+
+            // Lignes dont la base est dans A
+            bool[] lignes = new bool[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                if (A[b[i]])
+                    lignes[i] = true;
+            }
+
+            // --------------------------------
+            // Construction progressive de A
+            // --------------------------------
+
+            while (true)
+            {
+                // Etape 2 : calcul de Delta
+                int ligne;
+                int colonne;
+
+                int d = Delta(
+                    M, b, A, lignes,
+                    out ligne,
+                    out colonne
+                );
+
+                // Etape 3 :
+                // augmenter les colonnes de A de Delta
+
+                for (int j = 0; j < n; j++)
+                {
+                    if (A[j])
+                    {
+                        for (int i = 0; i < n; i++)
+                            M[i, j] += d;
+                    }
+                }
+                // --------------------------------
+                // Chercher le nouvel élément minimum
+                // dans A'
+                // --------------------------------
+
+                int C2 = colonne;
+                // C2 est la colonne contenant a'i
+                // Si elle contient déjà une base :
+                // A' -> A
+                // puis on recommence l'étape 2.
+
+                if (nb[C2] > 0)
+                {
+                    A[C2] = true;
+
+                    for (int i = 0; i < n; i++)
+                    {
+                        if (b[i] == C2)
+                            lignes[i] = true;
+                    }
+
+                    continue;
+                }
+
+                b[ligne] = C2;
+
+                break;
+            }
+        }
+    }
+
+
+    // 6. Afficher matrice + affectation
+    static void Afficher(int[,] M, int[] b)
     {
-        A[i] =false;
-        APrime[i] = true;
-    }
-}
+        int n = M.GetLength(0);
+        int cout = 0;
 
+        Console.WriteLine("\nAFFECTATION FINALE");
+
+        for (int i = 0; i < n; i++)
+        {
+            cout += M[i, b[i]];
+        }
+
+        Console.WriteLine("Cout total = " + cout);
+    }
+    // 7. Programme principal
+    static void Main()
+    {
+        int[,] M =
+        {
+            { 8, 2, 6, 7, 5 },
+            { 3, 4, 9, 3, 8 },
+            { 7, 6, 2, 8, 4 },
+            { 4, 9, 5, 3, 6 },
+            { 6, 5, 4, 7, 2 }
+        };
+
+        int[] solution = MackBradford(M);
+
+        Afficher(M, solution);
+    }
